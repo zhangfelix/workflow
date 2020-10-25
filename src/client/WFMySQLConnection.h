@@ -27,7 +27,7 @@ class WFMySQLConnection
 public:
 	/* example: mysql://username:passwd@127.0.0.1/dbname?character_set=utf8
 	 * IP string is recommmended in url. When using a domain name, the first
-	 * address resovled will be used. */
+	 * address resovled will be used. Don't use upstream name as a host. */
 	int init(const std::string& url);
 
 	void deinit() { }
