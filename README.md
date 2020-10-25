@@ -1,4 +1,4 @@
-# This is a nossl branch！
+# This is a study branch！Without ssl, without upstream. Very clean codes.
 still need crypto for sha1 and md5.
 
 [English version](README_en.md)
