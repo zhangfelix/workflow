@@ -498,9 +498,6 @@ static inline const char *__get_task_error_string(int error)
 	case WFT_ERR_URI_PORT_INVALID:
 		return "URI Port Invalid";
 
-	case WFT_ERR_UPSTREAM_UNAVAILABLE:
-		return "Upstream Unavailable";
-
 	case WFT_ERR_HTTP_BAD_REDIRECT_HEADER:
 		return "Http Bad Redirect Header";
 
