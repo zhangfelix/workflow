@@ -60,7 +60,6 @@ set(INCLUDE_HEADERS
 	src/client/WFMySQLConnection.h
 	src/manager/DNSCache.h
 	src/manager/WFGlobal.h
-	src/manager/UpstreamManager.h
 	src/manager/RouteManager.h
 	src/manager/EndpointParams.h
 	src/manager/WFFuture.h

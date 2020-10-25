@@ -31,7 +31,6 @@
 #include "WFGlobal.h"
 #include "Workflow.h"
 #include "WFTask.h"
-#include "UpstreamManager.h"
 #include "RouteManager.h"
 #include "URIParser.h"
 #include "WFTaskError.h"
@@ -107,35 +106,6 @@ inline WFGoTask *WFTaskFactory::create_go_task(const std::string& queue_name,
 }
 
 /**********WFComplexClientTask**********/
-
-// If you design Derived WFComplexClientTask, You have two choices:
-// 1) First choice will upstream by uri, then dns/dns-cache
-// 2) Second choice will directly communicate without upstream/dns/dns-cache
-
-// 1) First choice:
-// step 1. Child-Constructor call Father-Constructor to new WFComplexClientTask
-// step 2. call init(uri)
-// step 3. call set_type(type)
-// step 4. call set_info(info) or do nothing with info
-
-// 2) Second choice:
-// step 1. Child-Constructor call Father-Constructor to new WFComplexClientTask
-// step 2. call init(type, addr, addrlen, info)
-
-// Some optional APIs for you to implement:
-// [WFComplexTask]
-//       [ChildrenComplexTask]
-// 1. init()
-//       init_succ() or init_failed(); // default: return true;
-// 2. dispatch();
-//       check_request(); // default: return true;
-//       route(); // default:DNS; goto 1;
-// 3. message_out();
-// 4. message_in();
-// 5. keep_alive_timeout();
-// 6. done();
-//       finish_once(); // default: return true; means this is user request.
-//       // If redirect or retry: goto 1;
 
 /*
 DNS_CACHE_LEVEL_0	->	NO cache
@@ -343,7 +313,6 @@ private:
 	void switch_callback(WFTimerTask *task);
 
 	RouteManager::RouteResult route_result_;
-	UpstreamManager::UpstreamResult upstream_result_;
 
 	TransportType type_;
 	std::string info_;
@@ -457,23 +426,8 @@ void WFComplexClientTask<REQ, RESP, CTX>::init_with_uri()
 	route_result_.clear();
 	if (uri_.state == URI_STATE_SUCCESS && this->set_port())
 	{
-		int ret = UpstreamManager::choose(uri_, upstream_result_);
-
-		if (ret < 0)
-		{
-			this->state = WFT_STATE_SYS_ERROR;
-			this->error = errno;
-		}
-		else if (upstream_result_.state == UPSTREAM_ALL_DOWN)
-		{
-			this->state = WFT_STATE_TASK_ERROR;
-			this->error = WFT_ERR_UPSTREAM_UNAVAILABLE;
-		}
-		else
-		{
-			init_state_ = this->init_success() ? 1 : 0;
-			return;
-		}
+		init_state_ = this->init_success() ? 1 : 0;
+		return;
 	}
 	else
 	{
@@ -507,22 +461,11 @@ SubTask *WFComplexClientTask<REQ, RESP, CTX>::route()
 						  std::placeholders::_1);
 
 	is_retry_ = false;//route means refresh DNS cache level
-	if (upstream_result_.state == UPSTREAM_SUCCESS)
-	{
-		const auto *params = upstream_result_.address_params;
+	const auto *params = WFGlobal::get_global_settings();
 
-		dns_ttl_default = params->dns_ttl_default;
-		dns_ttl_min = params->dns_ttl_min;
-		endpoint_params = &params->endpoint_params;
-	}
-	else
-	{
-		const auto *params = WFGlobal::get_global_settings();
-
-		dns_ttl_default = params->dns_ttl_default;
-		dns_ttl_min = params->dns_ttl_min;
-		endpoint_params = &params->endpoint_params;
-	}
+	dns_ttl_default = params->dns_ttl_default;
+	dns_ttl_min = params->dns_ttl_min;
+	endpoint_params = &params->endpoint_params;
 
 	return new WFRouterTask(type_, uri_.host ? uri_.host : "",
 							uri_.port ? atoi(uri_.port) : 0, info_,
@@ -557,8 +500,6 @@ void WFComplexClientTask<REQ, RESP, CTX>::router_callback(SubTask *task)
 		series_of(this)->push_front(this);
 	else
 	{
-		UpstreamManager::notify_unavailable(upstream_result_.cookie);
-
 		if (this->callback)
 			this->callback(this);
 
@@ -669,8 +610,6 @@ SubTask *WFComplexClientTask<REQ, RESP, CTX>::done()
 		if (this->state == WFT_STATE_SUCCESS)
 		{
 			RouteManager::notify_available(route_result_.cookie, this->target);
-			UpstreamManager::notify_available(upstream_result_.cookie);
-			upstream_result_.clear();
 			// 4. children message out sth. else
 			if (!is_user_request)
 				return this;
@@ -678,7 +617,6 @@ SubTask *WFComplexClientTask<REQ, RESP, CTX>::done()
 		else if (this->state == WFT_STATE_SYS_ERROR)
 		{
 			RouteManager::notify_unavailable(route_result_.cookie, this->target);
-			UpstreamManager::notify_unavailable(upstream_result_.cookie);
 			// 5. complex task failed: retry
 			if (retry_times_ < retry_max_)
 			{

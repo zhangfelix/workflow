@@ -3,7 +3,6 @@ project(manager)
 
 set(SRC
 	DNSCache.cc
-	UpstreamManager.cc
 	RouteManager.cc
 	WFGlobal.cc
 )
