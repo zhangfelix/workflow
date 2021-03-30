@@ -39,6 +39,8 @@
 #include "Executor.h"
 #include "WFTask.h"
 #include "WFTaskError.h"
+#include "WFNameService.h"
+#include "WFDNSResolver.h"
 
 class __WFGlobal
 {
@@ -103,18 +105,7 @@ public:
 	}
 
 private:
-	__WFGlobal():
-		settings_(GLOBAL_SETTINGS_DEFAULT)
-	{
-		static_scheme_port_["http"] = "80";
-		static_scheme_port_["https"] = "443";
-		static_scheme_port_["redis"] = "6379";
-		static_scheme_port_["rediss"] = "6379";
-		static_scheme_port_["mysql"] = "3306";
-		static_scheme_port_["kafka"] = "9092";
-		sync_count_ = 0;
-		sync_max_ = 0;
-	}
+	__WFGlobal();
 
 private:
 	struct WFGlobalSettings settings_;
@@ -125,6 +116,40 @@ private:
 	int sync_count_;
 	int sync_max_;
 };
+
+__WFGlobal::__WFGlobal() : settings_(GLOBAL_SETTINGS_DEFAULT)
+{
+	static_scheme_port_["http"] = "80";
+	static_scheme_port_["Http"] = "80";
+	static_scheme_port_["HTTP"] = "80";
+
+	static_scheme_port_["https"] = "443";
+	static_scheme_port_["Https"] = "443";
+	static_scheme_port_["HTTPs"] = "443";
+	static_scheme_port_["HTTPS"] = "443";
+
+	static_scheme_port_["redis"] = "6379";
+	static_scheme_port_["Redis"] = "6379";
+	static_scheme_port_["REDIS"] = "6379";
+
+	static_scheme_port_["rediss"] = "6379";
+	static_scheme_port_["Rediss"] = "6379";
+	static_scheme_port_["REDISs"] = "6379";
+	static_scheme_port_["REDISS"] = "6379";
+
+	static_scheme_port_["mysql"] = "3306";
+	static_scheme_port_["Mysql"] = "3306";
+	static_scheme_port_["MySql"] = "3306";
+	static_scheme_port_["MySQL"] = "3306";
+	static_scheme_port_["MYSQL"] = "3306";
+
+	static_scheme_port_["kafka"] = "9092";
+	static_scheme_port_["Kafka"] = "9092";
+	static_scheme_port_["KAFKA"] = "9092";
+
+	sync_count_ = 0;
+	sync_max_ = 0;
+}
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 static std::mutex *__ssl_mutex;
@@ -492,6 +517,28 @@ private:
 	Executor compute_executor_;
 };
 
+class __NameServiceManager
+{
+public:
+	static __NameServiceManager *get_instance()
+	{
+		static __NameServiceManager kInstance;
+		return &kInstance;
+	}
+
+public:
+	WFNameService *get_name_service() { return &service_; }
+
+private:
+	static WFDNSResolver resolver_;
+	WFNameService service_;
+
+public:
+	__NameServiceManager() : service_(&__NameServiceManager::resolver_) { }
+};
+
+WFDNSResolver __NameServiceManager::resolver_;
+
 CommScheduler *WFGlobal::get_scheduler()
 {
 	return __CommManager::get_instance()->get_scheduler();
@@ -540,6 +587,11 @@ ExecQueue *WFGlobal::get_dns_queue()
 Executor *WFGlobal::get_dns_executor()
 {
 	return __CommManager::get_instance()->get_dns_executor();
+}
+
+WFNameService *WFGlobal::get_name_service()
+{
+	return __NameServiceManager::get_instance()->get_name_service();
 }
 
 const char *WFGlobal::get_default_port(const std::string& scheme)
@@ -662,6 +714,36 @@ static inline const char *__get_task_error_string(int error)
 
 	case WFT_ERR_MYSQL_COMMAND_DISALLOWED:
 		return "MySQL Command Disallowed";
+
+	case WFT_ERR_MYSQL_QUERY_NOT_SET:
+		return "MySQL Query Not Set";
+
+	case WFT_ERR_KAFKA_PARSE_RESPONSE_FAILED:
+		return "Kafka parse response failed";
+
+	case WFT_ERR_KAFKA_PRODUCE_FAILED:
+		return "Kafka produce api failed";
+
+	case WFT_ERR_KAFKA_FETCH_FAILED:
+		return "Kafka fetch api failed";
+
+	case WFT_ERR_KAFKA_CGROUP_FAILED:
+		return "Kafka cgroup failed";
+
+	case WFT_ERR_KAFKA_COMMIT_FAILED:
+		return "Kafka commit api failed";
+
+	case WFT_ERR_KAFKA_META_FAILED:
+		return "Kafka meta api failed";
+
+	case WFT_ERR_KAFKA_LEAVEGROUP_FAILED:
+		return "Kafka leavegroup failed";
+
+	case WFT_ERR_KAFKA_API_UNKNOWN:
+		return "Kafka api type unknown";
+
+	case WFT_ERR_KAFKA_VERSION_DISALLOWED:
+		return "Kafka broker version not supported";
 
 	default:
 		break;

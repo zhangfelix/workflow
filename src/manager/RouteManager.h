@@ -39,7 +39,7 @@ public:
 		CommSchedObject *request_object;
 
 	public:
-	//	RouteResult(): cookie(NULL), request_object(NULL) { }
+		RouteResult(): cookie(NULL), request_object(NULL) { }
 		void clear() { cookie = NULL; request_object = NULL; }
 	};
 
@@ -63,6 +63,7 @@ public:
 			const struct addrinfo *addrinfo,
 			const std::string& other_info,
 			const struct EndpointParams *endpoint_params,
+			const std::string& hostname,
 			RouteResult& result);
 
 	RouteManager()

@@ -82,5 +82,21 @@ set(INCLUDE_HEADERS
 	src/factory/WFAlgoTaskFactory.inl
 	src/factory/Workflow.h
 	src/factory/WFOperator.h
+	src/nameservice/WFNameService.h
+	src/nameservice/WFDNSResolver.h
+	src/nameservice/WFServiceGovernance.h
+	src/nameservice/UpstreamPolicies.h
 )
 
+if(KAFKA STREQUAL "y")
+	set(INCLUDE_HEADERS
+		${INCLUDE_HEADERS}
+		src/util/crc32c.h
+		src/protocol/KafkaMessage.h
+		src/protocol/KafkaDataTypes.h
+		src/protocol/KafkaResult.h
+		src/protocol/kafka_parser.h
+		src/client/WFKafkaClient.h
+		src/factory/KafkaTaskImpl.inl
+	)
+endif()

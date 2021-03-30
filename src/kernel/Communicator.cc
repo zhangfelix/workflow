@@ -240,17 +240,6 @@ int CommService::drain(int max)
 	return cnt;
 }
 
-inline void CommService::incref()
-{
-	__sync_add_and_fetch(&this->ref, 1);
-}
-
-inline void CommService::decref()
-{
-	if (__sync_sub_and_fetch(&this->ref, 1) == 0)
-		this->handle_unbound();
-}
-
 class CommServiceTarget : public CommTarget
 {
 public:
@@ -403,7 +392,7 @@ int Communicator::send_message_sync(struct iovec vectors[], int cnt,
 	ssize_t n;
 	int i;
 
-	while (1)
+	while (cnt > 0)
 	{
 		n = writev(entry->sockfd, vectors, cnt <= IOV_MAX ? cnt : IOV_MAX);
 		if (n < 0)
@@ -421,14 +410,8 @@ int Communicator::send_message_sync(struct iovec vectors[], int cnt,
 			}
 		}
 
-		cnt -= i;
-		if (cnt == 0)
-			break;
-
-		if (i < IOV_MAX)
-			return cnt;
-
 		vectors += i;
+		cnt -= i;
 	}
 
 	service = entry->service;
@@ -888,9 +871,7 @@ void Communicator::handle_listen_result(struct poller_result *res)
 	CommService *service = (CommService *)res->data.context;
 	struct CommConnEntry *entry;
 	CommServiceTarget *target;
-	struct poller_data data;
 	int timeout;
-	int ret;
 
 	switch (res->state)
 	{
@@ -901,30 +882,29 @@ void Communicator::handle_listen_result(struct poller_result *res)
 		{
 			if (service->ssl_ctx)
 			{
-				ret = __create_ssl(service->ssl_ctx, entry);
-				if (ret >= 0)
+				if (__create_ssl(service->ssl_ctx, entry) >= 0 &&
+					service->init_ssl(entry->ssl) >= 0)
 				{
-					data.operation = PD_OP_SSL_ACCEPT;
+					res->data.operation = PD_OP_SSL_ACCEPT;
 					timeout = service->ssl_accept_timeout;
 				}
 			}
 			else
 			{
-				ret = 0;
-				data.operation = PD_OP_READ;
-				data.message = NULL;
+				res->data.operation = PD_OP_READ;
+				res->data.message = NULL;
 				timeout = target->response_timeout;
 			}
 
-			if (ret >= 0)
+			if (res->data.operation != PD_OP_LISTEN)
 			{
-				data.fd = entry->sockfd;
-				data.ssl = entry->ssl;
-				data.context = entry;
-				if (mpoller_add(&data, timeout, this->mpoller) >= 0)
+				res->data.fd = entry->sockfd;
+				res->data.ssl = entry->ssl;
+				res->data.context = entry;
+				if (mpoller_add(&res->data, timeout, this->mpoller) >= 0)
 				{
 					if (this->stop_flag)
-						mpoller_del(data.fd, this->mpoller);
+						mpoller_del(res->data.fd, this->mpoller);
 					break;
 				}
 			}
@@ -962,13 +942,16 @@ void Communicator::handle_connect_result(struct poller_result *res)
 	case PR_ST_FINISHED:
 		if (target->ssl_ctx && !entry->ssl)
 		{
-			ret = __create_ssl(target->ssl_ctx, entry);
-			if (ret >= 0)
+			if (__create_ssl(target->ssl_ctx, entry) >= 0 &&
+				target->init_ssl(entry->ssl) >= 0)
 			{
+				ret = 0;
 				res->data.operation = PD_OP_SSL_CONNECT;
 				res->data.ssl = entry->ssl;
 				timeout = target->ssl_connect_timeout;
 			}
+			else
+				ret = -1;
 		}
 		else if ((session->out = session->message_out()) != NULL)
 		{
@@ -1358,7 +1341,7 @@ int Communicator::create_poller(size_t poller_threads)
 
 int Communicator::init(size_t poller_threads, size_t handler_threads)
 {
-	if (poller_threads == 0 || handler_threads == 0)
+	if (poller_threads == 0)
 	{
 		errno = EINVAL;
 		return -1;
@@ -1687,7 +1670,7 @@ int Communicator::sleep(SleepSession *session)
 	return -1;
 }
 
-int Communicator::is_handler_thread()
+int Communicator::is_handler_thread() const
 {
 	return thrdpool_in_pool(this->thrdpool);
 }
